@@ -126,7 +126,7 @@ ui =
         renderDictate st,
         HH.div [ HP.class_ (ClassName "attribution")] [
           HH.text "Made by ",
-          HH.a [ HP.href "http://github.com/kitlangton", HP.target "_blank"] [ HH.text "Kit Langton"]
+          HH.a [ HP.href "https://github.com/kitlangton/purescript-motion", HP.target "_blank"] [ HH.text "Kit Langton"]
         ]
       ]
 
