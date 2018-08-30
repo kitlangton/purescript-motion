@@ -1,13 +1,16 @@
 module Component where
 
-import CSS (Transformation(..), color, fromString, left, position, px, relative, top, transform)
-import CSS as CSS
-import Color.Scheme.Clrs (blue)
+
+import Data.Record.Fold
+import Record.Extra
+
+import CSS (Transformation(..), animation, fromString, left, position, px, relative, top, transform)
+import CSS.Common (initial)
 import Data.BooleanAlgebra ((&&))
 import Data.Foldable (all, foldl)
 import Data.List (List)
 import Data.Map (Map, alter, fromFoldable, lookup, toUnfoldable)
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (Maybe(..), fromMaybe, isJust)
 import Data.Newtype (class Newtype, unwrap)
 import Data.Tuple (Tuple(..))
 import Effect.Aff (Aff, Milliseconds(..), delay)
@@ -15,43 +18,57 @@ import Effect.Class.Console (log)
 import Halogen (ClassName(..))
 import Halogen as H
 import Halogen.HTML as HH
-import Halogen.HTML.CSS as CSS
+import Halogen.HTML.CSS (style) as CSS
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Keyboard (subscribeToKeydown)
 import Prelude (class Ord, type (~>), Unit, bind, const, discard, map, negate, pure, show, unit, ($), (/), (<$), (<<<), (<>), (==))
-import Record (class EqualFields)
+import Record.Builder (Builder)
 import Stepper (Velocity(..), defaultStepper)
 import Type.Row (class RowToList)
+import Type.Row.Homogeneous (class Homogeneous, class HomogeneousRowList)
 import Web.UIEvent.KeyboardEvent (KeyboardEvent, key)
 import Web.UIEvent.MouseEvent (MouseEvent)
 
-type State = {
-  position :: Position,
-  boxAnimation :: Animations,
-  dictateAnimation :: Animations
-}
+type BoxProperties a =
+  { left :: a
+  , rotate :: a
+  , scale :: a
+  , top :: a
+  }
+
+type DictateProperties a =
+  { left :: a
+  , scale :: a
+  , top :: a
+  }
+
+type State =
+  { position :: Position
+  , boxAnimation :: BoxProperties Animation
+  , dictateAnimation :: DictateProperties Animation
+  }
 
 data Position = Left
   | Right
   | Top
   | Bottom
 
-styleBoxForPosition :: Position -> Destinations
+styleBoxForPosition :: Position -> BoxProperties Number
 styleBoxForPosition position =
   case position of
-    Left -> fromFoldable [Tuple "left" $ negate 300.0, Tuple "top" 0.0, Tuple "scale" 2.0, Tuple "rotate" 0.0]
-    Right -> fromFoldable [Tuple "left" 300.0, Tuple "top" 0.0, Tuple "scale" 1.0, Tuple "rotate" 180.0]
-    Top -> fromFoldable [Tuple "left" 0.0, Tuple "top" $ negate 300.0, Tuple "scale" 1.5, Tuple "rotate" 90.0]
-    Bottom -> fromFoldable [Tuple "left" 0.0, Tuple "top" 300.0, Tuple "scale" 1.5, Tuple "rotate" $ negate 90.0]
+    Left -> {left: negate 300.0, top: 0.0, scale: 2.0, rotate: 0.0}
+    Right -> {left: 300.0, top: 0.0, scale: 1.0, rotate: 180.0}
+    Top -> {left: 0.0, top: negate 300.0, scale: 1.5, rotate: 90.0}
+    Bottom -> {left: 0.0, top: 300.0, scale:1.5, rotate: negate 90.0}
 
-styleDictateForPosition :: Position -> Destinations
+styleDictateForPosition :: Position -> DictateProperties Number
 styleDictateForPosition position =
   case position of
-    Left -> fromFoldable [Tuple "left" $ 0.0, Tuple "top" 0.0, Tuple "scale" 1.5]
-    Right -> fromFoldable [Tuple "left" $ 300.0, Tuple "top" 50.0, Tuple "scale" 0.5]
-    Top -> fromFoldable [Tuple "left" 0.0, Tuple "top" $ 300.0, Tuple "scale" 1.2]
-    Bottom -> fromFoldable [Tuple "left" 0.0, Tuple "top" 380.0, Tuple "scale" 1.0]
+    Left -> { left: 0.0, top: 0.0, scale: 1.5 }
+    Right -> {left: 300.0, top: 50.0, scale: 0.5}
+    Top -> {left: 0.0, top: 300.0, scale: 1.2}
+    Bottom -> {left: 0.0, top: 380.0, scale: 1.0}
 
 dictateForPosition :: Position -> String
 dictateForPosition position =
@@ -60,6 +77,14 @@ dictateForPosition position =
     Right -> "I'm tiny!"
     Top -> "You'll never catch me!"
     Bottom -> "You caught me :("
+
+
+initialState :: State
+initialState = {
+  position: Left,
+  boxAnimation: makeAnimations $ styleBoxForPosition Left,
+  dictateAnimation: makeAnimations $ styleDictateForPosition Left
+}
 
 data Query a
   = Step a
@@ -82,12 +107,6 @@ ui =
     }
   where
 
-  initialState :: State
-  initialState = {
-    position: Left,
-    boxAnimation: mkAnimations $ styleBoxForPosition Left,
-    dictateAnimation: mkAnimations $ styleDictateForPosition Left
-  }
 
   render :: State -> H.ComponentHTML Query
   render st =
@@ -97,9 +116,9 @@ ui =
             HP.class_ (ClassName "box"),
             CSS.style do
               position relative
-              left (px $ fromMaybe 0.0 $ map (_.val <<< unwrap) $ lookup "left" st.boxAnimation)
-              top (px $ fromMaybe 0.0 $ map (_.val <<< unwrap) $ lookup "top" st.boxAnimation)
-              transform $ Transformation $ fromString $ "scale(" <> show (fromMaybe 0.0 $ map (_.val <<< unwrap) $ lookup "scale" st.boxAnimation) <> ") " <> "rotate(" <> show (fromMaybe 0.0 $ map (_.val <<< unwrap) $ lookup "rotate" st.boxAnimation) <> "deg)"
+              left $ px st.boxAnimation.left.val
+              top $ px st.boxAnimation.top.val
+              transform $ Transformation $ fromString $ "scale(" <> show st.boxAnimation.scale.val <> ") " <> "rotate(" <> show st.boxAnimation.rotate.val <> "deg)"
           ] [
             HH.text "→"
           ]
@@ -117,9 +136,9 @@ ui =
       HH.div [
        CSS.style do
          position relative
-         left (px $ fromMaybe 0.0 $ map (_.val <<< unwrap) $ lookup "left" st.dictateAnimation)
-         top (px $ fromMaybe 0.0 $ map (_.val <<< unwrap) $ lookup "top" st.dictateAnimation)
-         transform $ Transformation $ fromString $ "scale(" <> show (fromMaybe 0.0 $ map (_.val <<< unwrap) $ lookup "scale" st.dictateAnimation) <> ")"
+         left $ px st.dictateAnimation.left.val
+         top $ px st.dictateAnimation.top.val
+         transform $ Transformation $ fromString $ "scale(" <> show st.dictateAnimation.scale.val <> ")"
       ] [
         HH.text $ dictateForPosition st.position
       ]
@@ -175,81 +194,58 @@ ui =
 
 -- ANMIMATIONS
 
--- type Dest d = { dest :: Number | d }
---
--- class EqualFields (rs :: RowList) (row :: # Type) | rs -> row where
---   equalFields :: RLProxy rs -> Record row -> Record row -> Boolean
---
--- instance equalFieldsCons
---   ::
---   ( IsSymbol name
---   , Eq ty
---   , Cons name ty tailRow row
---   , EqualFields tail row
---   ) => EqualFields (Cons name ty tail) row where
---   equalFields _ a b = get' a == get' b && equalRest a b
---     where
---       get' = get (SProxy :: SProxy name)
---       equalRest = equalFields (RLProxy :: RLProxy tail)
---
--- instance equalFieldsNil :: EqualFields Nil row where
---   equalFields _ _ _ = true
---
--- type Thing b = Record b
--- equal
---   :: forall r rs
---    . RowToList r rs
---   => EqualFields rs r
---   => Record r
---   -> Record r
---   -> Record r
--- equal a b = a
---
--- thing :: { string :: String
--- }
--- thing = equal { string: "hi"} { string: "No"}
 
--- dance :: Record String
--- dance  = { sheep: "a"}
--- dance a b = a
-
-
-newtype Animation = Animation {
+type Animation = {
   val :: Number,
   dest :: Number,
   velocity :: Velocity
 }
 
-derive instance newtypeAnimation :: Newtype Animation _
+-- ACTUAL
 
-type Animations = Map String Animation
-type Destinations = Map String Number
+type RecordMapper a b = forall row row' xs .
+  RowToList row xs =>
+  MapRecord xs row a b () row' =>
+  Record row -> Record row'
 
-mkAnimations :: Destinations -> Animations
-mkAnimations =
-  map (\n -> Animation { val: n, dest: n, velocity: Velocity 0.0} )
+makeAnimations :: RecordMapper Number Animation
+makeAnimations =
+  mapRecord (\n -> { val: n, dest: n, velocity: Velocity 0.0} )
 
-stepAnimations :: Animations -> Animations
-stepAnimations = map stepAnimaiton
+stepAnimations :: RecordMapper Animation Animation
+stepAnimations = mapRecord stepAnimaiton
 
-allStopped :: Animations -> Boolean
-allStopped = all isStopped
+allStopped :: forall row row' xs xs' row''.
+  RFold CollectS xs' row' (AppCat Maybe Builder {} { | row'' }) =>
+  RowToList row xs =>
+  RowToList row' xs' =>
+  MapRecord xs row Animation (Maybe Boolean) () row' =>
+  Record row -> Boolean
+allStopped = isJust <<< collect <<< mapRecord (isStopped)
 
-isStopped :: Animation -> Boolean
-isStopped (Animation { velocity }) = velocity == Velocity 0.0
+isStopped :: Animation -> Maybe Boolean
+isStopped ({ velocity }) = if velocity == Velocity 0.0 then Just true else Nothing
 
 stepAnimaiton :: Animation -> Animation
-stepAnimaiton (Animation {val, dest, velocity}) =
+stepAnimaiton ({val, dest, velocity}) =
   let
     Tuple val' velocity' = defaultStepper val velocity dest
   in
-    Animation { val: val', dest: dest, velocity: velocity' }
+    { val: val', dest: dest, velocity: velocity' }
 
 unionWith' :: forall k a b. Ord k => (a -> b -> b) -> Map k a -> Map k b -> Map k b
 unionWith' f m1 m2 = foldl go m2 (toUnfoldable m1 :: List (Tuple k a))
   where
   go m (Tuple k a) = alter (map (f a)) k m
 
-updateAnimations :: Destinations -> Animations -> Animations
-updateAnimations =
-  unionWith' (\dest' (Animation anim) -> Animation anim { dest = dest'} )
+updateAnimations :: forall xs a xs' b c xs''.
+  RowToList a xs
+  => RowToList b xs'
+  => RowToList c xs''
+  => MapRecord xs'' c (Tuple Number Animation) Animation () b
+  => ZipRecord xs a xs' b () c
+  => Record a
+  -> Record b
+  -> Record b
+updateAnimations destinations animations =
+  mapRecord (\(Tuple d v) -> v { dest = d }) $ zipRecord destinations animations
