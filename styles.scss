@@ -1,13 +1,32 @@
 @import "normalize";
 
 body {
-  margin: 40px;
+}
+
+input {
+  display: hidden;
+  outline: none;
+  border: none;
+  position: absolute;
+}
+
+.main {
+  background-color: rgb(0, 0, 20);
+}
+
+.box-container {
+  margin: 0;
+  height: 100vh;
+  background-color: blue;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .box {
-  margin-top: 10px;
   background-color: red;
   height: 50px;
+  pointer-events: none;
   width: 50px;
   border-radius: 10px;
 }
