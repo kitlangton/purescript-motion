@@ -8,3 +8,6 @@ install-deps:
 
 serve:
 	parcel serve index.html
+
+deploy:
+	pulp build && parcel build && surge dist -d "purescript-motion.surge.sh"

@@ -129,38 +129,38 @@ ui =
 -- ANMIMATIONS
 
 -- type Dest d = { dest :: Number | d }
-
-class EqualFields (rs :: RowList) (row :: # Type) | rs -> row where
-  equalFields :: RLProxy rs -> Record row -> Record row -> Boolean
-
-instance equalFieldsCons
-  ::
-  ( IsSymbol name
-  , Eq ty
-  , Cons name ty tailRow row
-  , EqualFields tail row
-  ) => EqualFields (Cons name ty tail) row where
-  equalFields _ a b = get' a == get' b && equalRest a b
-    where
-      get' = get (SProxy :: SProxy name)
-      equalRest = equalFields (RLProxy :: RLProxy tail)
-
-instance equalFieldsNil :: EqualFields Nil row where
-  equalFields _ _ _ = true
-
-type Thing b = Record b
-equal
-  :: forall r rs
-   . RowToList r rs
-  => EqualFields rs r
-  => Record r
-  -> Record r
-  -> Record r
-equal a b = a
-
-thing :: { string :: String
-}
-thing = equal { string: "hi"} { string: "No"}
+-- 
+-- class EqualFields (rs :: RowList) (row :: # Type) | rs -> row where
+--   equalFields :: RLProxy rs -> Record row -> Record row -> Boolean
+--
+-- instance equalFieldsCons
+--   ::
+--   ( IsSymbol name
+--   , Eq ty
+--   , Cons name ty tailRow row
+--   , EqualFields tail row
+--   ) => EqualFields (Cons name ty tail) row where
+--   equalFields _ a b = get' a == get' b && equalRest a b
+--     where
+--       get' = get (SProxy :: SProxy name)
+--       equalRest = equalFields (RLProxy :: RLProxy tail)
+--
+-- instance equalFieldsNil :: EqualFields Nil row where
+--   equalFields _ _ _ = true
+--
+-- type Thing b = Record b
+-- equal
+--   :: forall r rs
+--    . RowToList r rs
+--   => EqualFields rs r
+--   => Record r
+--   -> Record r
+--   -> Record r
+-- equal a b = a
+--
+-- thing :: { string :: String
+-- }
+-- thing = equal { string: "hi"} { string: "No"}
 
 -- dance :: Record String
 -- dance  = { sheep: "a"}
