@@ -1,9 +1,9 @@
 module Component where
 
-import Keyboard (subscribeToKeydown)
-import Prelude (class Ord, type (~>), Unit, bind, const, discard, map, negate, pure, show, unit, ($), (/), (<$), (<<<), (<>), (==))
-
-import CSS (Transformation(..), fromString, left, position, px, relative, top, transform)
+import CSS (Transformation(..), color, fromString, left, position, px, relative, top, transform)
+import CSS as CSS
+import Color.Scheme.Clrs (blue)
+import Data.BooleanAlgebra ((&&))
 import Data.Foldable (all, foldl)
 import Data.List (List)
 import Data.Map (Map, alter, fromFoldable, lookup, toUnfoldable)
@@ -18,36 +18,55 @@ import Halogen.HTML as HH
 import Halogen.HTML.CSS as CSS
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
+import Keyboard (subscribeToKeydown)
+import Prelude (class Ord, type (~>), Unit, bind, const, discard, map, negate, pure, show, unit, ($), (/), (<$), (<<<), (<>), (==))
 import Record (class EqualFields)
 import Stepper (Velocity(..), defaultStepper)
+import Type.Row (class RowToList)
 import Web.UIEvent.KeyboardEvent (KeyboardEvent, key)
 import Web.UIEvent.MouseEvent (MouseEvent)
-import Type.Row (class RowToList)
 
 type State = {
-  box :: Box,
-  boxAnimation :: Animations
+  position :: Position,
+  boxAnimation :: Animations,
+  dictateAnimation :: Animations
 }
 
-data Box = Left
+data Position = Left
   | Right
   | Top
   | Bottom
 
-styleForBox :: Box -> Destinations
-styleForBox box =
-  case box of
-    Left -> fromFoldable [Tuple "left" $ negate 300.0, Tuple "top" 0.0, Tuple "scale" 2.0]
-    Right -> fromFoldable [Tuple "left" 300.0, Tuple "top" 0.0, Tuple "scale" 1.0]
-    Top -> fromFoldable [Tuple "left" 0.0, Tuple "top" $ negate 300.0, Tuple "scale" 1.5]
-    Bottom -> fromFoldable [Tuple "left" 0.0, Tuple "top" 300.0, Tuple "scale" 1.5]
+styleBoxForPosition :: Position -> Destinations
+styleBoxForPosition position =
+  case position of
+    Left -> fromFoldable [Tuple "left" $ negate 300.0, Tuple "top" 0.0, Tuple "scale" 2.0, Tuple "rotate" 0.0]
+    Right -> fromFoldable [Tuple "left" 300.0, Tuple "top" 0.0, Tuple "scale" 1.0, Tuple "rotate" 180.0]
+    Top -> fromFoldable [Tuple "left" 0.0, Tuple "top" $ negate 300.0, Tuple "scale" 1.5, Tuple "rotate" 90.0]
+    Bottom -> fromFoldable [Tuple "left" 0.0, Tuple "top" 300.0, Tuple "scale" 1.5, Tuple "rotate" $ negate 90.0]
+
+styleDictateForPosition :: Position -> Destinations
+styleDictateForPosition position =
+  case position of
+    Left -> fromFoldable [Tuple "left" $ 0.0, Tuple "top" 0.0, Tuple "scale" 1.5]
+    Right -> fromFoldable [Tuple "left" $ 300.0, Tuple "top" 50.0, Tuple "scale" 0.5]
+    Top -> fromFoldable [Tuple "left" 0.0, Tuple "top" $ 300.0, Tuple "scale" 1.2]
+    Bottom -> fromFoldable [Tuple "left" 0.0, Tuple "top" 380.0, Tuple "scale" 1.0]
+
+dictateForPosition :: Position -> String
+dictateForPosition position =
+  case position of
+    Left -> "Try the arrow keys."
+    Right -> "I'm tiny!"
+    Top -> "You'll never catch me!"
+    Bottom -> "You caught me :("
 
 data Query a
   = Step a
   | Init a
   | HandleMouseMove MouseEvent a
   | HandleKeyDown KeyboardEvent (H.SubscribeStatus -> a)
-  | SetBox Box a
+  | SetBox Position a
 
 data Message = Toggled Boolean
 
@@ -65,25 +84,46 @@ ui =
 
   initialState :: State
   initialState = {
-    box: Left,
-    boxAnimation: mkAnimations $ styleForBox Left
+    position: Left,
+    boxAnimation: mkAnimations $ styleBoxForPosition Left,
+    dictateAnimation: mkAnimations $ styleDictateForPosition Left
   }
 
   render :: State -> H.ComponentHTML Query
-  render state =
+  render st =
     HH.div [ HP.class_ (ClassName "main"), HE.onMouseMove $ HE.input HandleMouseMove ]
       [ HH.div [ HP.class_ $ ClassName "box-container"] [
         HH.div [
             HP.class_ (ClassName "box"),
             CSS.style do
               position relative
-              left (px $ fromMaybe 0.0 $ map (_.val <<< unwrap) $ lookup "left" state.boxAnimation)
-              top (px $ fromMaybe 0.0 $ map (_.val <<< unwrap) $ lookup "top" state.boxAnimation)
-              transform $ Transformation $ fromString $ "scale(" <> show (fromMaybe 0.0 $ map (_.val <<< unwrap) $ lookup "scale" state.boxAnimation) <> ")"
+              left (px $ fromMaybe 0.0 $ map (_.val <<< unwrap) $ lookup "left" st.boxAnimation)
+              top (px $ fromMaybe 0.0 $ map (_.val <<< unwrap) $ lookup "top" st.boxAnimation)
+              transform $ Transformation $ fromString $ "scale(" <> show (fromMaybe 0.0 $ map (_.val <<< unwrap) $ lookup "scale" st.boxAnimation) <> ") " <> "rotate(" <> show (fromMaybe 0.0 $ map (_.val <<< unwrap) $ lookup "rotate" st.boxAnimation) <> "deg)"
           ] [
+            HH.text "→"
           ]
+        ],
+        renderDictate st,
+        HH.div [ HP.class_ (ClassName "attribution")] [
+          HH.text "Made by ",
+          HH.a [ HP.href "http://github.com/kitlangton", HP.target "_blank"] [ HH.text "Kit Langton"]
         ]
       ]
+
+  renderDictate :: State -> H.ComponentHTML Query
+  renderDictate st =
+    HH.div [ HP.class_ (ClassName "dictate") ] [
+      HH.div [
+       CSS.style do
+         position relative
+         left (px $ fromMaybe 0.0 $ map (_.val <<< unwrap) $ lookup "left" st.dictateAnimation)
+         top (px $ fromMaybe 0.0 $ map (_.val <<< unwrap) $ lookup "top" st.dictateAnimation)
+         transform $ Transformation $ fromString $ "scale(" <> show (fromMaybe 0.0 $ map (_.val <<< unwrap) $ lookup "scale" st.dictateAnimation) <> ")"
+      ] [
+        HH.text $ dictateForPosition st.position
+      ]
+    ]
 
   eval :: Query ~> H.ComponentDSL State Query Message Aff
   eval = case _ of
@@ -102,9 +142,13 @@ ui =
         "ArrowRight" -> eval $ SetBox Right unit
         _ -> pure unit
 
-    SetBox box next -> do
+    SetBox position next -> do
       st <- H.get
-      H.modify_ _ { box = box, boxAnimation = updateAnimations (styleForBox box) st.boxAnimation }
+      H.modify_ _ {
+        position = position
+        , boxAnimation = updateAnimations (styleBoxForPosition position) st.boxAnimation
+        , dictateAnimation = updateAnimations (styleDictateForPosition position) st.dictateAnimation
+      }
       if allStopped st.boxAnimation
         then
           eval $ Step next
@@ -112,11 +156,14 @@ ui =
           pure next
 
     Step next -> do
-      animations <- H.gets _.boxAnimation
-      let animations' = stepAnimations animations
+      boxAnimation <- H.gets _.boxAnimation
+      let boxAnimation' = stepAnimations boxAnimation
 
-      H.modify_ _ { boxAnimation = animations' }
-      if allStopped animations'
+      dictateAnimation <- H.gets _.dictateAnimation
+      let dictateAnimation' = stepAnimations dictateAnimation
+
+      H.modify_ _ { boxAnimation = boxAnimation', dictateAnimation = dictateAnimation' }
+      if allStopped boxAnimation' && allStopped dictateAnimation'
         then
           pure next
         else do
@@ -129,7 +176,7 @@ ui =
 -- ANMIMATIONS
 
 -- type Dest d = { dest :: Number | d }
--- 
+--
 -- class EqualFields (rs :: RowList) (row :: # Type) | rs -> row where
 --   equalFields :: RLProxy rs -> Record row -> Record row -> Boolean
 --
